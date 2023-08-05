@@ -1,11 +1,13 @@
-# Explanations for Multi-Model Planning (MMP)
-![alt tag](logo.png)
+# Goal State Divergence 
 
 ## Required Packages
 ### Python2.7 for the explanation generation scripts
 ### Python3 for grounder and parser
 ### Fast downward - http://www.fast-downward.org/
 ### VAL - https://github.com/KCL-Planning/VAL
+
+## Greenhouse Quick Script 
+### python3.8 Explainer.py -s KELSEYSEARCH -c ./gh_modifications_list.txt -m ../domain/benchmarks/greenhouse/original_domain.pddl -n ../domain/benchmarks/greenhouse/original_domain.pddl -t ../domain/benchmarks/greenhouse/domain_template.pddl -p ../domain/benchmarks/greenhouse/prob1.pddl -r ../domain/benchmarks/greenhouse/prob_template.pddl
 
 ## Driver Script Options
 ```
