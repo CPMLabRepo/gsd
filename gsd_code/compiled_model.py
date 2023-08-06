@@ -6,6 +6,8 @@ from pddl import parse_domain, parse_problem
 from pddl.logic.effects import When, AndEffect
 from pddl.logic.base import Not, And
 
+from utils import get_plan
+
 import copy
 
 import sys, os, csv
@@ -96,7 +98,7 @@ def calculate_min_gsd_with_design(path_to_human_domain, path_to_human_problem, p
     for i in range(number_of_designs):
         for j in range(len(missing_init_preds)):
             design_actions.append(Action(
-                "design_" + str(i) + "#" + str(designs[j].name),
+                "design_act_" + str(designs[j].name) +"_act_" +str(i) ,
                 parameters = [],
                 precondition = And(time_steps[i], Predicate("design_allowed")),
                 effect = And(Not(missing_init_preds[j]), designs[j], time_steps_used[i], Not(time_steps[i]))
@@ -120,7 +122,7 @@ def calculate_min_gsd_with_design(path_to_human_domain, path_to_human_problem, p
             prev_design_list = []
             for prev_design in prev_design_set:
                 prev_design_list.append(Predicate(prev_design))
-            ce_1 = When(And(*prev_design_list), Not(Predicate("design_unseen")))
+            ce_1 = When(And(*prev_design_list), Not(Predicate("unseen_design")))
             effect_list.append(ce_1)
 
 
@@ -240,8 +242,164 @@ def calculate_min_gsd_with_design(path_to_human_domain, path_to_human_problem, p
     with open("/tmp/merged_problem.pddl", "w") as f:
         f.write(problem_str)
 
-    return new_domain, new_problem
+    return "/tmp/merged_domain.pddl", "/tmp/merged_problem.pddl"
 
+def find_max_gsd(path_to_human_domain, path_to_human_problem, path_to_robot_domain, path_to_robot_problem, designs):
+    #calculate the max gsd for the given problem pair
+
+    # Check if the optional argument was provided
+    if path_to_robot_problem is None:
+        path_to_robot_problem = path_to_human_problem
+
+
+
+    robot_domain = parse_domain(path_to_robot_domain)
+    robot_problem = parse_problem(path_to_robot_problem)
+
+    human_domain = parse_domain(path_to_human_domain)
+    human_problem = parse_problem(path_to_human_problem)
+
+
+    ## Merge Predicates
+    #create a predicate to capture robot failures
+
+    list_h_preds = list(human_domain.predicates)
+    list_r_preds = list(robot_domain.predicates)
+
+    predicate_map = {}
+
+    #change robot predicates' names: add "r_"
+    for pred in list_r_preds:
+        pred._name = "r_" + str(pred.name)
+        predicate_map[pred.name] = pred
+
+    #merged domain's predicates
+    merged_preds = list_h_preds + list_r_preds
+    design_changes = []
+    for design in designs:
+        design_changes.append(design.replace("d_", ""))
+    # Find the set of initial states that are missing from the robot problem
+    new_human_init_preds = []
+    for init_pred in human_problem.init:
+        if init_pred.name not in design_changes:
+            new_human_init_preds.append(init_pred)
+
+    # Make a design for each missing initial state predicate
+
+    other_predicates = []
+    other_predicates.append(Predicate("robot_can_act"))
+    other_predicates.append(Predicate("human_can_act"))
+
+    # a check predicate for each of the human predicate
+    check_preds = []
+    for pred in list_h_preds:
+        check_preds.append(Predicate("check_" + str(pred.name)))
+
+    complete_set_of_predicates = merged_preds +  other_predicates + check_preds
+
+    ## Merge Actions
+    list_h_actions = list(human_domain.actions)
+    list_r_actions = list(robot_domain.actions)
+
+    new_human_action =[]
+    # Add human_can_act to all human action preconditions
+    for h_action in list_h_actions:
+        new_human_action.append(Action(
+            h_action.name,
+            parameters = h_action.parameters,
+            precondition = And(Predicate("human_can_act"), h_action.precondition),
+            effect = h_action.effect
+        ))
+
+    # Have a flip action that checks whether human goal is met and then flips human_can_act to robot_can_act
+    flip_human_action = Action(
+        "flip_human",
+        parameters = [],
+        precondition = And(Predicate("human_can_act"), human_problem.goal),
+        effect = And(Not(Predicate("human_can_act")), Predicate("robot_can_act"))
+    )
+
+    # For each robot action add "r_" to the action name and every predicate in the definition
+    new_robot_action = []
+    for r_action in list_r_actions:
+        r_action._name = "r_" + str(r_action.name)
+        if type(r_action.precondition) is not And:
+            r_action.precondition._name = "r_" + str(r_action.precondition.name)
+        else:
+            for prec in r_action.precondition.operands:
+                prec._name = "r_" + str(prec.name)
+        for eff in r_action.effect.operands:
+            eff._name = "r_" + str(eff.name)
+        # Add robot_can_act to all robot action preconditions
+        previous_prec = r_action.precondition
+        new_robot_action.append(Action(
+            r_action.name,
+            parameters = r_action.parameters,
+            precondition = And(Predicate("robot_can_act"), r_action.precondition),
+            effect = r_action.effect
+        ))
+
+   # Add a flip robot can action action that checks whether robot goal is met and then deletes robot_can_act
+    # change the predicates in the original robot goals to the new robot predicates
+    new_robot_goal = []
+    for pred in robot_problem.goal.operands:
+        new_robot_goal.append(predicate_map["r_" + str(pred.name)])
+    new_robot_goal = And(*new_robot_goal)
+
+    flip_robot_action = Action(
+        "flip_robot",
+        parameters = [],
+        precondition = And(Predicate("robot_can_act"), new_robot_goal),
+        effect = And(Not(Predicate("robot_can_act")))
+    )
+
+
+    # create check action definition strings for each human predicate that check whether the corresponding robot predicate is true or false
+    # If the values match then it make check predicate corresponding to that predicate true
+    check_actions = []
+    for pred in list_h_preds:
+        check_actions.append(ACTION_TEMPLATE.format(action_name="check_act" + str(pred.name),preconditions="(r_" + str(pred.name)+") ("+pred.name+") (not (robot_can_act)) (not (human_can_act))", effects="(check_" + str(pred.name)+")", cost="0"))
+        check_actions.append(ACTION_TEMPLATE.format(action_name="check_act_not_" + str(pred.name),preconditions="(not (r_" + str(pred.name)+")) (not ("+pred.name+")) (not (robot_can_act)) (not (human_can_act))", effects="(check_" + str(pred.name)+")", cost="0"))
+        check_actions.append(ACTION_TEMPLATE.format(action_name="check_disagree_act1" + str(pred.name),preconditions="(not (r_" + str(pred.name)+")) ("+pred.name+") (not (robot_can_act)) (not (human_can_act))", effects="(check_" + str(pred.name)+")", cost="10"))
+        check_actions.append(ACTION_TEMPLATE.format(action_name="check_disagree_act2" + str(pred.name),preconditions=" (r_" + str(pred.name)+") (not ("+pred.name+")) (not (robot_can_act)) (not (human_can_act))", effects="(check_" + str(pred.name)+")", cost="10"))
+
+
+    all_actions = new_human_action + list_r_actions +  [flip_human_action, flip_robot_action] #+ check_actions
+
+    # initial state includes the original human initial state, robot initial state in new predicates, and unused design predicate
+
+    for robot_init in list(robot_problem.init):
+        robot_init._name = "r_" + robot_init._name
+
+    merged_inits_for_problem = new_human_init_preds + list(robot_problem.init) + [Predicate("human_can_act")]
+    new_goal = And(*check_preds)
+
+    # Create the new domain and problem
+    new_domain = Domain(
+        name = "merged_domain",
+        requirements = [":strips", ":typing", ":action-costs"],
+        types = list(human_domain.types),
+        constants = list(human_domain.constants),
+        predicates = complete_set_of_predicates,
+        actions = all_actions
+    )
+
+    new_problem = Problem(
+        name = "merged_problem",
+        domain = new_domain,
+        objects = list(human_problem.objects),
+        init = merged_inits_for_problem,
+        goal = new_goal
+    )
+    # write the new domain and problem file in /tmp/
+    domain_str = domain_to_string_for_cost_based_init_state(new_domain, action_str = "\n".join(check_actions)).lower()
+    problem_str = problem_to_string_for_cost_based_init_state(new_problem).lower()
+    with open("/tmp/merged_domain.pddl", "w") as f:
+        f.write(domain_str)
+    with open("/tmp/merged_problem.pddl", "w") as f:
+        f.write(problem_str)
+
+    return "/tmp/merged_domain.pddl", "/tmp/merged_problem.pddl"
 
 
 
@@ -255,6 +413,7 @@ if __name__ == '__main__':
 
     parser.add_argument('-r_d', '--robot_domain', help='Path to robot domain file', required=True)
     parser.add_argument('-r_i', '--robot_problem', help='Path to robot problem file')
+    parser.add_argument('-d_c', '--design_count', help='number of designs')
 
     # Parse the command-line arguments
     args = parser.parse_args()
@@ -270,6 +429,46 @@ if __name__ == '__main__':
     if path_to_robot_problem is None:
         path_to_robot_problem = path_to_human_problem
 
-    dom, prob = calculate_min_gsd_with_design(path_to_human_domain, path_to_human_problem, path_to_robot_domain, path_to_robot_problem)
+    if args.design_count is None:
+        design_count = 1
+    else:
+        design_count = int(args.design_count)
+
+    all_designs_found = False
+    found_designs = []
+    best_designs = None
+    best_divergence = 10000000
+    while not all_designs_found:
+        dom_file, prob_file = calculate_min_gsd_with_design(path_to_human_domain, path_to_human_problem, path_to_robot_domain, path_to_robot_problem, design_count, found_designs)
+        plan, cost = get_plan(dom_file, prob_file)
+        if len(plan) == 0:
+            print("No more designs found, exiting...")
+            all_designs_found = True
+        else:
+            design_set = set()
+            for action in plan:
+                if "design_act_" in action:
+                    design_set.add(action.split("_act_")[1])
+            if len(design_set) == 0:
+                print("IMPORTANT ERROR: No design found, need to update the code to handle this case!!!!")
+                exit(1)
+            found_designs.append(design_set)
+            print("Found design: ", design_set)
+            max_dom_file, max_prob_file = find_max_gsd(path_to_human_domain, path_to_human_problem, path_to_robot_domain, path_to_robot_problem, design_set)
+            plan, cost = get_plan(max_dom_file, max_prob_file)
+            if len(plan) == 0:
+                print("IMPORTANT ERROR: Something went wrong!!!")
+                exit(1)
+            check_disagreements = []
+            for action in plan:
+                if "check_disagree_act" in action:
+                    check_disagreements.append(action)
+            print ("Divergence count: ", len(check_disagreements))
+            if best_divergence > len(check_disagreements):
+                best_divergence = len(check_disagreements)
+                best_designs = design_set
+
+    print("All found designs: ", found_designs)
+    print("Best design: ", best_designs)
 
 
