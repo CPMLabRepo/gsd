@@ -7,7 +7,7 @@
 ### VAL - https://github.com/KCL-Planning/VAL
 
 ## Greenhouse Quick Script 
-### python3.8 Explainer.py -s KELSEYSEARCH -c ./gh_modifications_list.txt -m ../domain/benchmarks/new-greenhouse/original_domain.pddl -n ../domain/benchmarks/new-greenhouse/original_domain.pddl -t ../domain/benchmarks/new-greenhouse/domain_template.pddl -p ../domain/benchmarks/new-greenhouse/prob1.pddl -r ../domain/benchmarks/new-greenhouse/prob_template.pddl
+### python3.8 Explainer.py -s KELSEYSEARCH -c ./gh_modifications_list.txt -m ../domain/benchmarks/water/original_domain.pddl -n ../domain/benchmarks/water/original_domain.pddl -t ../domain/benchmarks/water/domain_template.pddl -p ../domain/benchmarks/water/prob1.pddl -r ../domain/benchmarks/water/prob_template.pddl
 
 ## Driver Script Options
 ```
