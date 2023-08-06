@@ -96,7 +96,7 @@ def calculate_min_gsd_with_design(path_to_human_domain, path_to_human_problem, p
     for i in range(number_of_designs):
         for j in range(len(missing_init_preds)):
             design_actions.append(Action(
-                "design_" + str(i) + "_" + str(j),
+                "design_" + str(i) + "#" + str(designs[j].name),
                 parameters = [],
                 precondition = And(time_steps[i], Predicate("design_allowed")),
                 effect = And(Not(missing_init_preds[j]), designs[j], time_steps_used[i], Not(time_steps[i]))
@@ -113,11 +113,22 @@ def calculate_min_gsd_with_design(path_to_human_domain, path_to_human_problem, p
         ))
 
     # Disallow design action that deletes design_allowed and adds human_can_act
+
+    effect_list = [Not(Predicate("design_allowed")), Predicate("human_can_act")]
+    if len(prev_designs) > 0:
+        for prev_design_set in prev_designs:
+            prev_design_list = []
+            for prev_design in prev_design_set:
+                prev_design_list.append(Predicate(prev_design))
+            ce_1 = When(And(*prev_design_list), Not(Predicate("design_unseen")))
+            effect_list.append(ce_1)
+
+
     disallow_design_action = Action(
-        "disallow_flip",
+        "design_flip",
         parameters = [],
         precondition = Predicate("design_allowed"),
-        effect = And(Not(Predicate("design_allowed")), Predicate("human_can_act"))
+        effect = AndEffect(*effect_list)
     )
 
 
