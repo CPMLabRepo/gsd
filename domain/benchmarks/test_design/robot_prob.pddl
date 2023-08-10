@@ -2,7 +2,7 @@
 (:domain BLOCKS)
 (:objects )
 (:init
-(p)
+(p) (s)
 )
 (:goal
 (and

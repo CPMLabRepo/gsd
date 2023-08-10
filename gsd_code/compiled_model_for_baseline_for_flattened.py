@@ -7,9 +7,9 @@ from pddl.logic.effects import When, AndEffect
 from pddl.logic.base import Not, And
 
 from utils import get_plan
-import time
-import copy
 
+import copy
+import time
 import sys, os, csv
 import argparse
 
@@ -63,7 +63,6 @@ def calculate_min_gsd_with_design(path_to_human_domain, path_to_human_problem, p
         if init_pred not in human_problem.init:
             missing_init_preds.append(Predicate(init_pred.name))
 
-    print ("Missing initial predicates: " + str(missing_init_preds))
     # Make a design for each missing initial state predicate
     designs = []
     for missing_init_pred in missing_init_preds:
@@ -117,7 +116,7 @@ def calculate_min_gsd_with_design(path_to_human_domain, path_to_human_problem, p
 
     # Disallow design action that deletes design_allowed and adds human_can_act
 
-    effect_list = [Not(Predicate("design_allowed")), Predicate("human_can_act")]
+    effect_list = [Not(Predicate("design_allowed")), Predicate("human_can_act"), Predicate("robot_can_act")]
     if len(prev_designs) > 0:
         for prev_design_set in prev_designs:
             prev_design_list = []
@@ -151,7 +150,7 @@ def calculate_min_gsd_with_design(path_to_human_domain, path_to_human_problem, p
         "flip_human",
         parameters = [],
         precondition = And(Predicate("human_can_act"), human_problem.goal),
-        effect = And(Not(Predicate("human_can_act")), Predicate("robot_can_act"))
+        effect = And(Not(Predicate("human_can_act")))
     )
 
     # For each robot action add "r_" to the action name and every predicate in the definition
@@ -168,7 +167,6 @@ def calculate_min_gsd_with_design(path_to_human_domain, path_to_human_problem, p
                 eff._name = "r_" + str(eff.name)
             elif type(eff) is Not:
                 eff.argument._name = "r_" + str(eff.argument._name)
-            #eff._name = "r_" + str(eff.name)
         # Add robot_can_act to all robot action preconditions
         previous_prec = r_action.precondition
         new_robot_action.append(Action(
@@ -339,7 +337,7 @@ def find_max_gsd(path_to_human_domain, path_to_human_problem, path_to_robot_doma
                 eff._name = "r_" + str(eff.name)
             elif type(eff) is Not:
                 eff.argument._name = "r_" + str(eff.argument._name)
-
+        # Add robot_can_act to all robot action preconditions
         previous_prec = r_action.precondition
         new_robot_action.append(Action(
             r_action.name,
@@ -380,7 +378,7 @@ def find_max_gsd(path_to_human_domain, path_to_human_problem, path_to_robot_doma
     for robot_init in list(robot_problem.init):
         robot_init._name = "r_" + robot_init._name
 
-    merged_inits_for_problem = new_human_init_preds + list(robot_problem.init) + [Predicate("human_can_act")]
+    merged_inits_for_problem = new_human_init_preds + list(robot_problem.init) + [Predicate("human_can_act"), Predicate("robot_can_act")]
     new_goal = And(*check_preds)
 
     # Create the new domain and problem
@@ -491,5 +489,8 @@ if __name__ == '__main__':
     print("LOG>>> Total time taken: ", time.time() - total_time)
     print("LOG>>> No of designs found: ", len(found_designs))
     print("LOG>>> Size of Best design found: ", len(best_designs))
+
+
+
 
 

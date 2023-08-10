@@ -17,10 +17,10 @@ PROB_TEMPL_STR = '''
 (define (problem FINAL-PROBLEM)
 (:domain FINAL_DOMAIN)
 (:objects )
-(:INIT 
+(:init 
 %INIT%
 )
-(:goal (AND 
+(:goal (and 
 %GOAL%
 )
 )
